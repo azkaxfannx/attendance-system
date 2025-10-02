@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import * as faceapi from "face-api.js";
 
+// PERBAIKI INTERFACE DI FaceDetector.tsx
 interface FaceDetectorProps {
-  onFaceDetected: (faceData: any) => void;
+  onFaceDetected: (faceData: {
+    descriptor: number[];
+    timestamp: string;
+    photoMetadata?: {
+      fileId: string;
+      url: string;
+      fileSize: number;
+    };
+  }) => void;
   onNoFaceDetected: () => void;
 }
 
@@ -65,11 +74,36 @@ export default function FaceDetector({
     }
   };
 
+  const capturePhoto = async (): Promise<Blob> => {
+    if (!videoRef.current) {
+      throw new Error("Video not available");
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Could not get canvas context");
+
+    ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+
+    return new Promise((resolve) => {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+        },
+        "image/jpeg",
+        0.8
+      );
+    });
+  };
+
   const startDetection = async () => {
     if (!videoRef.current || !canvasRef.current || !modelsLoaded) return;
 
     setIsDetecting(true);
-    faceDetectedRef.current = false; // ← RESET STATE
+    faceDetectedRef.current = false;
     await startVideo();
 
     videoRef.current.addEventListener("play", () => {
@@ -110,30 +144,60 @@ export default function FaceDetector({
           faceapi.draw.drawDetections(canvas, resizedDetections);
           faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
 
-          // Check if face detected
+          // Check if face detected - PASTIKAN INI MASUK DALAM INTERVAL
           if (detections.length > 0) {
-            // CEK SUDAH PERNAH DETEKSI ATAU BELUM
             if (!faceDetectedRef.current) {
-              faceDetectedRef.current = true; // MARK SUDAH DETEKSI
+              faceDetectedRef.current = true;
 
-              // Wajah terdeteksi - ambil descriptor pertama
               const faceDescriptor = detections[0].descriptor;
 
-              // Pastikan descriptor ada dan valid
+              // Di FaceDetector.tsx - update handle face detection
               if (faceDescriptor && faceDescriptor.length > 0) {
-                console.log(
-                  "Face detected, descriptor length:",
-                  faceDescriptor.length
-                );
+                console.log("Face detected, capturing photo...");
 
-                // Kirim data yang sederhana dan valid
-                onFaceDetected({
-                  descriptor: Array.from(faceDescriptor),
-                  timestamp: new Date().toISOString(),
-                });
+                try {
+                  // Capture foto
+                  const photoBlob = await capturePhoto();
 
-                // HENTIKAN DETEKSI SETELAH BERHASIL
-                stopDetection();
+                  // Upload langsung ke Google Drive via API
+                  const uploadResponse = await fetch("/api/upload-photo", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      photo: await blobToBase64(photoBlob),
+                      fileName: `attendance-${Date.now()}.jpg`,
+                      attendanceData: {
+                        descriptor: Array.from(faceDescriptor),
+                        timestamp: new Date().toISOString(),
+                      },
+                    }),
+                  });
+
+                  const uploadResult = await uploadResponse.json();
+
+                  if (uploadResponse.ok) {
+                    // Kirim data ke parent component
+                    onFaceDetected({
+                      descriptor: Array.from(faceDescriptor),
+                      timestamp: new Date().toISOString(),
+                      photoMetadata: uploadResult.photoMetadata, // {fileId, url}
+                    });
+                  } else {
+                    throw new Error(uploadResult.error);
+                  }
+
+                  stopDetection();
+                } catch (error) {
+                  console.error("Error uploading photo:", error);
+                  // Fallback: tetap kirim data wajah tanpa foto
+                  onFaceDetected({
+                    descriptor: Array.from(faceDescriptor),
+                    timestamp: new Date().toISOString(),
+                  });
+                  stopDetection();
+                }
               }
             }
           } else {
@@ -145,6 +209,19 @@ export default function FaceDetector({
           onNoFaceDetected();
         }
       }, 1000);
+    });
+  };
+
+  // TAMBAHKAN FUNGSI UNTUK KONVERSI BLOB KE BASE64
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result as string;
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
   };
 

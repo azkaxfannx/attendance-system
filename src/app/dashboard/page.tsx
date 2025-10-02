@@ -62,14 +62,25 @@ export default function DashboardPage() {
     try {
       console.log("Sending face data to server:", faceData);
 
+      // Siapkan data untuk dikirim
+      const requestData: any = {
+        faceData: {
+          descriptor: faceData.descriptor,
+          timestamp: faceData.timestamp,
+        },
+      };
+
+      // Jika ada foto, tambahkan ke request
+      if (faceData.photo) {
+        requestData.photo = faceData.photo;
+      }
+
       const response = await fetch("/api/attendance", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          faceData: faceData,
-        }),
+        body: JSON.stringify(requestData),
       });
 
       const data = await response.json();
@@ -79,30 +90,25 @@ export default function DashboardPage() {
         setCameraMessageType("success");
         fetchAttendances();
 
-        // Untuk alert success: langsung close camera, tapi alert tetap
         setTimeout(() => {
           setShowCamera(false);
-          // Alert akan tetap ada sampai user menutupnya atau ada action lain
-        }, 0);
+        }, 2000); // Beri delay 2 detik agar user bisa baca pesan sukses
       } else {
-        // Tampilkan error (termasuk "sudah absen hari ini")
         setCameraMessage(data.error || "Gagal mencatat absensi");
         setCameraMessageType("error");
 
-        // Untuk alert error: langsung close camera, tapi alert tetap
         setTimeout(() => {
           setShowCamera(false);
-        }, 0);
+        }, 3000);
       }
     } catch (error) {
       console.error("Attendance error:", error);
       setCameraMessage("Terjadi kesalahan jaringan saat mencatat absensi");
       setCameraMessageType("error");
 
-      // Untuk network error: langsung close camera, tapi alert tetap
       setTimeout(() => {
         setShowCamera(false);
-      }, 0);
+      }, 3000);
     } finally {
       setLoading(false);
     }
@@ -151,6 +157,11 @@ export default function DashboardPage() {
       locale: id,
     })}.csv`;
     a.click();
+  };
+
+  const viewPhoto = (attendanceId: string) => {
+    // Buka di tab baru
+    window.open(`/api/attendance/photo/${attendanceId}`, "_blank");
   };
 
   // Reset semua state ketika kamera ditutup

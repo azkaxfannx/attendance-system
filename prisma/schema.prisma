@@ -25,6 +25,21 @@ model Attendance {
   status    Status
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  photo     AttendancePhoto? // ← TAMBAHKAN INI
+}
+
+model AttendancePhoto {
+  id           String   @id @default(cuid())
+  attendanceId String   @unique
+  googleDriveFileId String
+  googleDriveUrl    String
+  mimeType     String
+  fileSize     Int
+  createdAt    DateTime @default(now())
+  
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  
+  @@map("attendance_photos")
 }
 
 enum Role {

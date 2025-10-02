@@ -12,8 +12,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse request body untuk mendapatkan face data
-    const { faceData } = await request.json();
+    const { faceData } = await request.json(); // ← HAPUS photo dari sini
 
     // Validasi: wajah harus terdeteksi
     if (!faceData) {
@@ -69,19 +68,31 @@ export async function POST(request: NextRequest) {
       status = Status.LATE;
     }
 
-    // Create attendance record
+    // Create attendance record - PERBAIKI BAGIAN INI
+    const attendanceData: any = {
+      userId: session.user.id,
+      status,
+    };
+
+    // Jika ada photoMetadata, tambahkan relation
+    if (faceData.photoMetadata) {
+      attendanceData.photo = {
+        create: {
+          googleDriveFileId: faceData.photoMetadata.fileId,
+          googleDriveUrl: faceData.photoMetadata.url,
+          mimeType: "image/jpeg",
+          fileSize: faceData.photoMetadata.fileSize,
+        },
+      };
+    }
+
     const attendance = await prisma.attendance.create({
-      data: {
-        userId: session.user.id,
-        status,
-      },
+      data: attendanceData,
       include: {
         user: {
-          select: {
-            username: true,
-            fullName: true,
-          },
+          select: { username: true, fullName: true },
         },
+        photo: true,
       },
     });
 
@@ -90,6 +101,7 @@ export async function POST(request: NextRequest) {
       user: attendance.user.fullName,
       status: attendance.status,
       timestamp: attendance.timestamp,
+      hasPhoto: !!attendance.photo,
     });
 
     return NextResponse.json({
@@ -100,12 +112,12 @@ export async function POST(request: NextRequest) {
         timestamp: attendance.timestamp,
         status: attendance.status,
         user: attendance.user,
+        hasPhoto: !!attendance.photo,
       },
     });
   } catch (error) {
     console.error("Error creating attendance:", error);
 
-    // Berikan error message yang lebih spesifik
     if (error instanceof Error) {
       console.error("Error details:", error.message);
     }
