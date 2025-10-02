@@ -1,0 +1,39 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String      @id @default(cuid())
+  username  String      @unique
+  password  String
+  fullName  String
+  role      Role
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  attendances Attendance[]
+}
+
+model Attendance {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now())
+  status    Status
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum Status {
+  PRESENT
+  LATE
+  ABSENT
+}
